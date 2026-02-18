@@ -42,6 +42,24 @@ def test_validate_tokens_reports_missing_sections() -> None:
     assert "Missing required section: semantic" in errors
 
 
+def test_validate_tokens_accepts_valid_optional_gradients_and_shadows() -> None:
+    tokens = _sample_tokens()
+    tokens["gradients"] = {"sunset": ["#f59e0b", "#ef4444"]}
+    tokens["shadows"] = {"soft": "0 2px 4px rgba(0,0,0,0.1)"}
+    errors = sync.validate_tokens(tokens)
+    assert errors == []
+
+
+def test_validate_tokens_rejects_invalid_optional_gradients_and_shadows() -> None:
+    tokens = _sample_tokens()
+    tokens["gradients"] = {"broken": ["not-a-color"]}
+    tokens["shadows"] = {"soft": 42}
+    errors = sync.validate_tokens(tokens)
+    assert "Gradient 'broken' should have at least 2 colors" in errors
+    assert "Gradient 'broken' color at index 0 should be hex or rgb string" in errors
+    assert "Shadow 'soft' should be a string" in errors
+
+
 def test_strip_metadata_removes_prefixed_keys() -> None:
     stripped = sync.strip_metadata(_sample_tokens())
     assert "$schema" not in stripped

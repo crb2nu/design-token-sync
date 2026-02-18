@@ -42,6 +42,9 @@ def validate_tokens(tokens: dict[str, Any]) -> list[str]:
     """Validate token structure. Returns list of errors."""
     errors: list[str] = []
 
+    def is_color_value(value: str) -> bool:
+        return value.startswith("#") or value.startswith("rgb")
+
     required_sections = ["palettes", "diagram", "semantic", "geometry", "glass"]
     for section in required_sections:
         if section not in tokens:
@@ -56,7 +59,7 @@ def validate_tokens(tokens: dict[str, Any]) -> list[str]:
             for color_name, color_value in palette.items():
                 if not isinstance(color_value, str):
                     errors.append(f"Color '{palette_name}.{color_name}' should be a string")
-                elif not (color_value.startswith("#") or color_value.startswith("rgb")):
+                elif not is_color_value(color_value):
                     errors.append(f"Color '{palette_name}.{color_name}' should be hex or rgb format")
 
     # Validate diagram themes
@@ -69,6 +72,34 @@ def validate_tokens(tokens: dict[str, Any]) -> list[str]:
             for prop in required_theme_props:
                 if prop not in theme:
                     errors.append(f"Diagram theme '{theme_name}' missing property: {prop}")
+
+    # Validate optional gradients
+    if "gradients" in tokens:
+        gradients = tokens["gradients"]
+        if not isinstance(gradients, dict):
+            errors.append("Gradients should be an object")
+        else:
+            for gradient_name, gradient_values in gradients.items():
+                if not isinstance(gradient_values, list):
+                    errors.append(f"Gradient '{gradient_name}' should be a list")
+                    continue
+                if len(gradient_values) < 2:
+                    errors.append(f"Gradient '{gradient_name}' should have at least 2 colors")
+                for idx, color in enumerate(gradient_values):
+                    if not isinstance(color, str) or not is_color_value(color):
+                        errors.append(
+                            f"Gradient '{gradient_name}' color at index {idx} should be hex or rgb string"
+                        )
+
+    # Validate optional shadows
+    if "shadows" in tokens:
+        shadows = tokens["shadows"]
+        if not isinstance(shadows, dict):
+            errors.append("Shadows should be an object")
+        else:
+            for shadow_name, shadow_value in shadows.items():
+                if not isinstance(shadow_value, str):
+                    errors.append(f"Shadow '{shadow_name}' should be a string")
 
     return errors
 
