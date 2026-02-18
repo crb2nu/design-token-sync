@@ -62,3 +62,18 @@ def test_generate_typescript_types_includes_named_unions(tmp_path: Path) -> None
     content = output.read_text()
     assert "export type PaletteName = 'brand';" in content
     assert "export type DiagramThemeName = 'light';" in content
+
+
+def test_changed_key_paths_reports_nested_changes() -> None:
+    before = {"palettes": {"brand": {"primary": "#111111"}}}
+    after = {"palettes": {"brand": {"primary": "#222222", "secondary": "#333333"}}}
+    paths = sync.changed_key_paths(before, after)
+    assert "palettes.brand.primary" in paths
+    assert "palettes.brand.secondary" in paths
+
+
+def test_sync_to_target_dry_run_does_not_write(tmp_path: Path) -> None:
+    target = tmp_path / "out" / "tokens.json"
+    changed = sync.sync_to_target(_sample_tokens(), target, dry_run=True)
+    assert target.exists() is False
+    assert "palettes" in changed

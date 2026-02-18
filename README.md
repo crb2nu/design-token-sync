@@ -21,6 +21,9 @@ python sync.py --check
 # Sync both TypeScript and Python targets
 python sync.py
 
+# Preview changed token keys without writing files
+python sync.py --dry-run
+
 # Sync only TypeScript target
 python sync.py --target ts
 

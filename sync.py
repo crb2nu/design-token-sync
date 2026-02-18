@@ -7,6 +7,7 @@ target libraries (visual-kit for TypeScript, py-visual-kit for Python).
 Usage:
     python sync.py                    # Sync all targets
     python sync.py --check            # Validate tokens only
+    python sync.py --dry-run          # Preview changed keys without writing
     python sync.py --target ts        # Sync TypeScript only
     python sync.py --target python    # Sync Python only
     python sync.py --generate-types   # Generate TypeScript types
@@ -14,7 +15,6 @@ Usage:
 
 import argparse
 import json
-import shutil
 import sys
 from datetime import datetime, timezone
 from pathlib import Path
@@ -78,20 +78,63 @@ def strip_metadata(tokens: dict[str, Any]) -> dict[str, Any]:
     return {k: v for k, v in tokens.items() if not k.startswith("$")}
 
 
-def sync_to_target(tokens: dict[str, Any], target_path: Path) -> None:
-    """Sync tokens to a target file."""
-    # Strip metadata for cleaner output
+def load_existing_tokens(path: Path) -> dict[str, Any] | None:
+    """Load existing target tokens if the file exists and is valid JSON."""
+    if not path.exists():
+        return None
+    try:
+        with open(path, "r") as f:
+            data = json.load(f)
+    except (OSError, json.JSONDecodeError):
+        return None
+    if isinstance(data, dict):
+        return data
+    return None
+
+
+def changed_key_paths(before: Any, after: Any, prefix: str = "") -> list[str]:
+    """Return leaf key paths that differ between two token structures."""
+    if isinstance(before, dict) and isinstance(after, dict):
+        paths: list[str] = []
+        for key in sorted(set(before.keys()) | set(after.keys())):
+            key_path = f"{prefix}.{key}" if prefix else key
+            paths.extend(changed_key_paths(before.get(key), after.get(key), key_path))
+        return paths
+    if before != after:
+        return [prefix or "<root>"]
+    return []
+
+
+def print_change_summary(changed_paths: list[str], preview_limit: int = 8) -> None:
+    """Print a concise summary of changed keys."""
+    if not changed_paths:
+        print("    No token key changes detected.")
+        return
+    preview = ", ".join(changed_paths[:preview_limit])
+    if len(changed_paths) > preview_limit:
+        preview = f"{preview}, +{len(changed_paths) - preview_limit} more"
+    print(f"    Changed keys ({len(changed_paths)}): {preview}")
+
+
+def sync_to_target(tokens: dict[str, Any], target_path: Path, dry_run: bool = False) -> list[str]:
+    """Sync tokens to a target file and return changed key paths."""
     clean_tokens = strip_metadata(tokens)
+    existing_tokens = load_existing_tokens(target_path) or {}
+    changed_paths = changed_key_paths(existing_tokens, clean_tokens)
 
-    # Ensure parent directory exists
+    if dry_run:
+        print(f"  [DRY RUN] Would sync to: {target_path}")
+        print_change_summary(changed_paths)
+        return changed_paths
+
     target_path.parent.mkdir(parents=True, exist_ok=True)
-
-    # Write with consistent formatting
     with open(target_path, "w") as f:
         json.dump(clean_tokens, f, indent=2)
-        f.write("\n")  # Trailing newline
+        f.write("\n")
 
     print(f"  Synced to: {target_path}")
+    print_change_summary(changed_paths)
+    return changed_paths
 
 
 def generate_typescript_types(tokens: dict[str, Any], output_path: Path) -> None:
@@ -209,6 +252,8 @@ def main() -> int:
     """Main entry point."""
     parser = argparse.ArgumentParser(description="Design Token Sync Tool")
     parser.add_argument("--check", action="store_true", help="Validate tokens only")
+    parser.add_argument("--dry-run", action="store_true",
+                        help="Show target changes without writing files")
     parser.add_argument("--target", choices=["ts", "python", "all"], default="all",
                         help="Target to sync (default: all)")
     parser.add_argument("--generate-types", action="store_true",
@@ -250,18 +295,26 @@ def main() -> int:
 
     # Sync to targets
     print("Syncing tokens...")
-    for target_name, target_path in targets.items():
-        sync_to_target(tokens, target_path)
+    for target_path in targets.values():
+        sync_to_target(tokens, target_path, dry_run=args.dry_run)
 
     # Generate types if requested
     if args.generate_types:
         print("Generating type definitions...")
-        if "ts" in targets:
-            ts_types_path = targets["ts"].parent / "tokens.types.ts"
-            generate_typescript_types(tokens, ts_types_path)
-        if "python" in targets:
-            py_types_path = targets["python"].parent / "token_types.py"
-            generate_python_types(tokens, py_types_path)
+        if args.dry_run:
+            if "ts" in targets:
+                ts_types_path = targets["ts"].parent / "tokens.types.ts"
+                print(f"  [DRY RUN] Would generate TypeScript types: {ts_types_path}")
+            if "python" in targets:
+                py_types_path = targets["python"].parent / "token_types.py"
+                print(f"  [DRY RUN] Would generate Python types: {py_types_path}")
+        else:
+            if "ts" in targets:
+                ts_types_path = targets["ts"].parent / "tokens.types.ts"
+                generate_typescript_types(tokens, ts_types_path)
+            if "python" in targets:
+                py_types_path = targets["python"].parent / "token_types.py"
+                generate_python_types(tokens, py_types_path)
 
     print("Done!")
     return 0
