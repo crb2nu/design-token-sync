@@ -1,3 +1,7 @@
+include:
+  - project: 'services/tech-radar'
+    file: '/ci/radar.yml'
+
 stages:
   - lint
   - test
@@ -37,3 +41,6 @@ publish:
     - when: never
   script:
     - echo "Manual publish step on tags."
+
+radar-scan:
+  extends: .radar-scan
