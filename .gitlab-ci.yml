@@ -1,6 +1,8 @@
 include:
   - project: 'services/tech-radar'
     file: '/ci/radar.yml'
+  - project: 'platform/gitops'
+    file: '/ci/templates/python.yml'
 
 stages:
   - lint
@@ -8,23 +10,17 @@ stages:
   - build
   - publish
 
-default:
-  image: python:3.12
-  before_script:
-    - pip install --upgrade pip
-    - pip install -e ".[dev]"
-
+# Flat layout (sync.py + tests/, no src/): lint targets are overridden below.
 lint:
-  stage: lint
+  extends: .python-lint
   script:
     - ruff check sync.py tests
 
 test:
-  stage: test
-  script:
-    - pytest -v --maxfail=1
+  extends: .python-test
 
 build:
+  extends: .python-base
   stage: build
   script:
     - pip install build
@@ -35,6 +31,7 @@ build:
 
 publish:
   stage: publish
+  image: docker.io/library/python:3.12
   rules:
     - if: $CI_COMMIT_TAG
       when: manual
